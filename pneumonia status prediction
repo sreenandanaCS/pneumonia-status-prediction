@@ -1,0 +1,77 @@
+import streamlit as st
+import os
+from skimage.transform import resize
+from skimage.io import imread
+from tensorflow import keras
+from tempfile import NamedTemporaryFile
+from gtts import gTTS
+from io import BytesIO
+
+def predict_pneumonia_status(image_path, model_path):
+    model = keras.models.load_model(model_path)
+
+    img = imread(image_path)
+    img = resize(img, (150, 150, 1))
+    img = img.reshape(1, 150, 150, 1)
+
+    predictions = model.predict(img)
+
+    predicted_category_index = predictions.argmax()
+    confidence_score = predictions[0][predicted_category_index] * 100
+
+    categories = ['Pneumonia Symptoms Detected', 'No Symptoms']
+    predicted_category = categories[predicted_category_index]
+
+    return predicted_category, confidence_score
+
+def save_uploaded_file(uploaded_file):
+    temp_file = NamedTemporaryFile(delete=False)
+    temp_file.write(uploaded_file.read())
+    return temp_file.name
+
+def main():
+    st.title("🌡 Pneumonia Status Prediction 🏥")
+
+    uploaded_file = st.file_uploader("Choose a file", type=["jpg", "jpeg", "png", "pdf"])
+
+    if uploaded_file is not None:
+        st.image(uploaded_file, caption="Uploaded Image.", use_column_width=True)
+        st.write("")
+        st.write("Classifying...")
+
+        # Save the uploaded file to a temporary location
+        temp_file_path = save_uploaded_file(uploaded_file)
+
+        # Specify the path to your pre-trained model
+        model_path = r'E:\myprojects\streamlit_pnemonia\pneumonia.h5'
+
+        # Get the prediction and confidence score
+        prediction_result, confidence_score = predict_pneumonia_status(temp_file_path, model_path)
+
+        # Display prediction as text
+        st.text(f"Prediction: {prediction_result}")
+        if prediction_result == 'Pneumonia Symptoms Detected':
+            st.text(f"Confidence Score: {confidence_score:.2f}%")
+
+        # Text-to-speech using gTTS
+        speech_text = f"The prediction result is {prediction_result}"
+        if prediction_result == 'Pneumonia Symptoms Detected':
+            speech_text += f" with a confidence score of {confidence_score:.2f} percent."
+
+        tts = gTTS(speech_text)
+        mp3_fp = BytesIO()
+        tts.write_to_fp(mp3_fp)
+        st.audio(mp3_fp.getvalue(), format="audio/mp3")
+
+        # Colored alert based on prediction
+        if prediction_result == 'Pneumonia Symptoms Detected':
+            st.warning("⚠️ Pneumonia symptoms detected!")
+        elif prediction_result == 'No Symptoms':
+            st.info("✅ No pneumonia symptoms detected.")
+
+        # Delete the temporary file
+        os.unlink(temp_file_path)
+
+if __name__ == '__main__':
+    main()
+
